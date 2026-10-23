@@ -1,0 +1,9 @@
+{
+	"id": "widget-bridge",
+	"name": "Widget Bridge",
+	"version": "0.1.0",
+	"minAppVersion": "1.4.0",
+	"description": "Feeds notes to Android home-screen widgets and adds obsidian://widget-bridge URI actions (toggle, append, open, run command) for widgets and Routines.",
+	"author": "almight-74",
+	"isDesktopOnly": false
+}
