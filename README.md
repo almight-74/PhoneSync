@@ -15,7 +15,7 @@ The widget shows the note as of the last time Obsidian was open. Android only le
 3. In Obsidian, open a note and run **Widget Bridge: Show current note in a widget**. To use today's daily note, add `@daily` in the plugin settings.
 4. Long-press the home screen, open **Widgets**, then **Obsidian Widgets**:
    - **Obsidian note:** pick a note. Tap a task to tick it, tap a line to open the note, and tap ⟳ to refresh.
-   - **Obsidian actions:** four buttons. The defaults are New, Daily, Find and Append. Long-press the widget to edit them.
+   - **Obsidian actions:** four buttons. The defaults are New, Daily, ✏️ Capture and 🎤 Voice. Long-press the widget to edit them.
 5. **Capture:** long-press the app icon and pick *Capture* or *Voice note*, use the ✏️/🎤 buttons, or share text from any app and choose **Send to Obsidian**. Pick a destination, then type or dictate.
 
 ## Capture destinations
