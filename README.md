@@ -5,9 +5,9 @@ Lightweight Android home-screen widgets for Obsidian. They work with a vault kep
 | Part | What it does |
 |---|---|
 | `plugin/` (Obsidian plugin, Widget Bridge) | Sends pinned notes to the widgets. Handles `obsidian://widget-bridge` actions. |
-| `android/` (companion app, no libraries) | Note widget, Actions widget, Quick append dialog and launcher shortcut. |
+| `android/` (companion app, no libraries) | Note widget, Actions widget, capture dialog (voice, share sheet, destinations, templates), launcher shortcuts. |
 
-The widget shows the note as of the last time Obsidian was open. The plugin pushes changes on every edit and whenever you leave Obsidian. Ticking a checkbox or appending text opens Obsidian for a moment so it can edit the file, then returns you to the home screen.
+The widget shows the note as of the last time Obsidian was open. Android only lets Obsidian send updates while it is in the foreground, so the plugin sends changes while you are in Obsidian. Anything it couldn't send goes out the next time you open Obsidian. You can choose to send on save, while typing, or never in **Settings → Widget Bridge → Auto-refresh**. Ticking a task or capturing text opens Obsidian for a moment so it can edit the file, then returns you to the home screen.
 
 ## Install
 1. **Plugin:** install the BRAT community plugin, then use *Add beta plugin* with `almight-74/PhoneSync`.
@@ -16,12 +16,22 @@ The widget shows the note as of the last time Obsidian was open. The plugin push
 4. Long-press the home screen, open **Widgets**, then **Obsidian Widgets**:
    - **Obsidian note:** pick a note. Tap a task to tick it, tap a line to open the note, and tap ⟳ to refresh.
    - **Obsidian actions:** four buttons. The defaults are New, Daily, Find and Append. Long-press the widget to edit them.
-5. **Quick append** is also available by long-pressing the app icon.
+5. **Capture:** long-press the app icon and pick *Capture* or *Voice note*, use the ✏️/🎤 buttons, or share text from any app and choose **Send to Obsidian**. Pick a destination, then type or dictate.
+
+## Capture destinations
+Set these up in the app (open *Obsidian Widgets* from the launcher). Each destination has:
+- **Mode:** `append` or `prepend` adds to a note (a path, or `@daily`), optionally under a heading. `new` creates a note in a folder.
+- **File name** (new notes only) and **Template**. Both accept the tokens `{{text}}`, `{{title}}` (first line), `{{date}}`, `{{time}}` and `{{datetime}}`.
+- Example template for tasks: `- [ ] {{text}} ({{time}})`.
+
+The same screen shows when each note last reached the app, which helps with troubleshooting refresh. To see each send as it happens, turn on *Debug: notice on each push* in the plugin settings.
 
 ## URI actions (Routines, Tasker, shortcuts)
 ```
 obsidian://widget-bridge?action=command&id=<command-id>      run any Obsidian command
 obsidian://widget-bridge?action=append&file=Inbox&text=Hi    append a line (optional &heading=Log)
+obsidian://widget-bridge?action=capture&mode=prepend&file=Log&text=Hi      prepend (mode=append works too)
+obsidian://widget-bridge?action=capture&mode=new&folder=Inbox&name=Idea&text=Hi   new note in a folder
 obsidian://widget-bridge?action=open&file=@daily             open a note (created if missing)
 obsidian://widget-bridge?action=toggle&file=Tasks.md&line=3  tick/untick a task (0-based line)
 obsidian://widget-bridge?action=push                         refresh widgets

@@ -4,17 +4,38 @@ import android.content.Context
 import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/** A saved capture target. `target` is a note path for append/prepend, or a folder for "new". */
+data class Destination(
+    val name: String,
+    val mode: String,          // append | prepend | new
+    val target: String,
+    val heading: String = "",
+    val template: String = "{{text}}",
+    val fileName: String = "{{date}} {{time}}",
+)
 
 /** Everything the app persists: note snapshots from the plugin and per-widget settings. */
 object Store {
-    const val APPEND = "append"
+    const val APPEND = "append" // button target: open the capture dialog
+    const val VOICE = "voice"   // button target: capture dialog with dictation started
+
+    val MODES = listOf("append", "prepend", "new")
 
     /** Default buttons for a new Actions widget: label to target. */
     val DEFAULT_ACTIONS = listOf(
         "＋ New" to "file-explorer:new-file",
         "Daily" to bridge("open", "file" to "@daily"),
-        "Find" to "switcher:open",
-        "Append" to APPEND,
+        "✏️ Capture" to APPEND,
+        "🎤 Voice" to VOICE,
+    )
+
+    val DEFAULT_DESTINATIONS = listOf(
+        Destination("Daily note", "append", "@daily"),
+        Destination("Inbox (new note)", "new", "Inbox"),
     )
 
     private fun prefs(c: Context) = c.getSharedPreferences("widgets", Context.MODE_PRIVATE)
@@ -35,8 +56,12 @@ object Store {
     fun saveSnapshot(c: Context, json: String) {
         val key = JSONObject(json).getString("key")
         val keys = prefs(c).getStringSet("keys", emptySet())!! + key
-        prefs(c).edit().putString("snap:$key", json).putStringSet("keys", keys).apply()
+        prefs(c).edit().putString("snap:$key", json).putStringSet("keys", keys)
+            .putLong("recv:$key", System.currentTimeMillis()).apply()
     }
+
+    /** When the app last received [key] from Obsidian (0 = never). */
+    fun received(c: Context, key: String): Long = prefs(c).getLong("recv:$key", 0)
 
     fun snapshot(c: Context, key: String): JSONObject? =
         prefs(c).getString("snap:$key", null)?.let { runCatching { JSONObject(it) }.getOrNull() }
@@ -63,9 +88,52 @@ object Store {
 
     fun forget(c: Context, id: Int) = prefs(c).edit().remove("w:$id:note").remove("w:$id:actions").apply()
 
-    // ---------- quick append ----------
+    // ---------- capture ----------
 
-    fun appendTarget(c: Context): String = prefs(c).getString("appendTarget", "@daily")!!
+    fun destinations(c: Context): List<Destination> {
+        val raw = prefs(c).getString("destinations", null) ?: return DEFAULT_DESTINATIONS
+        val arr = JSONArray(raw)
+        return (0 until arr.length()).map {
+            val o = arr.getJSONObject(it)
+            Destination(o.optString("name"), o.optString("mode", "append"), o.optString("target"),
+                o.optString("heading"), o.optString("template", "{{text}}"), o.optString("fileName", "{{date}} {{time}}"))
+        }
+    }
 
-    fun setAppendTarget(c: Context, v: String) = prefs(c).edit().putString("appendTarget", v).apply()
+    fun setDestinations(c: Context, list: List<Destination>) {
+        val arr = JSONArray()
+        list.forEach {
+            arr.put(JSONObject().put("name", it.name).put("mode", it.mode).put("target", it.target)
+                .put("heading", it.heading).put("template", it.template).put("fileName", it.fileName))
+        }
+        prefs(c).edit().putString("destinations", arr.toString()).apply()
+    }
+
+    fun lastDestination(c: Context): Int = prefs(c).getInt("lastDest", 0)
+
+    fun setLastDestination(c: Context, i: Int) = prefs(c).edit().putInt("lastDest", i).apply()
+
+    /** Fills {{text}}, {{title}}, {{date}}, {{time}}, {{datetime}}. */
+    fun expand(template: String, text: String, now: Date = Date()): String {
+        val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(now)
+        val time = SimpleDateFormat("HH:mm", Locale.US).format(now)
+        val title = text.lineSequence().firstOrNull { it.isNotBlank() }?.trim()?.take(60) ?: ""
+        // User text goes in last so tokens typed inside it stay literal.
+        return template.ifBlank { "{{text}}" }
+            .replace("{{datetime}}", "$date $time").replace("{{date}}", date).replace("{{time}}", time)
+            .replace("{{title}}", title).replace("{{text}}", text)
+    }
+
+    /** The obsidian:// URI that delivers [text] to [d] through the plugin's capture action. */
+    fun captureUri(d: Destination, text: String): String {
+        val now = Date()
+        val body = expand(d.template, text, now)
+        return if (d.mode == "new") {
+            bridge("capture", "mode" to "new", "folder" to d.target,
+                "name" to expand(d.fileName.ifBlank { "{{date}} {{time}}" }, text, now), "text" to body, "back" to "1")
+        } else {
+            bridge("capture", "mode" to d.mode, "file" to d.target.ifBlank { "@daily" },
+                "heading" to d.heading, "text" to body, "back" to "1")
+        }
+    }
 }

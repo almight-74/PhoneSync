@@ -6,6 +6,9 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="obsidian" />
         </intent>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
     </queries>
 
     <application
@@ -46,12 +49,19 @@
         </activity>
 
         <activity
-            android:name=".AppendActivity"
+            android:name=".CaptureActivity"
             android:excludeFromRecents="true"
             android:exported="true"
+            android:label="@string/capture"
             android:taskAffinity=""
             android:theme="@style/DialogTheme"
-            android:windowSoftInputMode="stateVisible" />
+            android:windowSoftInputMode="stateVisible">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
 
         <receiver
             android:name=".NoteWidgetProvider"

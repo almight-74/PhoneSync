@@ -2,11 +2,21 @@
     <shortcut
         android:enabled="true"
         android:icon="@mipmap/ic_launcher"
-        android:shortcutId="append"
-        android:shortcutShortLabel="@string/append">
+        android:shortcutId="capture"
+        android:shortcutShortLabel="@string/capture_short">
         <intent
-            android:action="android.intent.action.VIEW"
-            android:targetClass="com.phonesync.widgets.AppendActivity"
+            android:action="android.intent.action.MAIN"
+            android:targetClass="com.phonesync.widgets.CaptureActivity"
+            android:targetPackage="com.phonesync.widgets" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="voice"
+        android:shortcutShortLabel="@string/voice_short">
+        <intent
+            android:action="com.phonesync.widgets.VOICE"
+            android:targetClass="com.phonesync.widgets.CaptureActivity"
             android:targetPackage="com.phonesync.widgets" />
     </shortcut>
 </shortcuts>

@@ -49,6 +49,13 @@ export function toggleInContent(content: string, line: number, match?: string): 
 	return lines.join("\n");
 }
 
+/** Index of the first line after YAML frontmatter (0 if there is none). */
+function bodyStart(lines: string[]): number {
+	if (lines[0]?.trim() !== "---") return 0;
+	const end = lines.findIndex((l, i) => i > 0 && l.trim() === "---");
+	return end > 0 ? end + 1 : 0;
+}
+
 /** Append `text` to the end of the file, or to the end of the section under `heading`. */
 export function appendToContent(content: string, text: string, heading?: string): string {
 	if (heading) {
@@ -72,6 +79,35 @@ export function appendToContent(content: string, text: string, heading?: string)
 	return content + (content.endsWith("\n") ? "" : "\n") + text + "\n";
 }
 
+/** Insert `text` right after the frontmatter, or right under `heading` (created at the top if missing). */
+export function prependToContent(content: string, text: string, heading?: string): string {
+	if (content === "") return (heading ? `## ${heading}\n` : "") + text + "\n";
+	const lines = content.split("\n");
+	const start = bodyStart(lines);
+	if (heading) {
+		const h = lines.findIndex((l, i) => i >= start && /^#{1,6}\s/.test(l) &&
+			l.replace(/^#{1,6}\s+/, "").trim() === heading.trim());
+		if (h >= 0) lines.splice(h + 1, 0, text);
+		else lines.splice(start, 0, `## ${heading}`, text, "");
+	} else {
+		lines.splice(start, 0, text);
+	}
+	return lines.join("\n");
+}
+
+/** File name without characters Obsidian or Android reject. */
+export function safeFileName(name: string): string {
+	return name.replace(/[\\/:*?"<>|#^[\]]/g, "-").replace(/\s+/g, " ").trim().slice(0, 120) || "Untitled";
+}
+
+/** `folder/name.md`, or `folder/name 1.md`, `name 2.md`… when taken. */
+export function uniquePath(folder: string, name: string, exists: (path: string) => boolean): string {
+	const dir = folder.replace(/^\/+|\/+$/g, "");
+	const base = (dir ? `${dir}/` : "") + safeFileName(name);
+	if (!exists(`${base}.md`)) return `${base}.md`;
+	for (let n = 1; ; n++) if (!exists(`${base} ${n}.md`)) return `${base} ${n}.md`;
+}
+
 /** Task text without checkbox, `{{field:: value}}` blocks and block ids. */
 export function cleanTaskText(line: string): string {
 	const m = TASK_RE.exec(line);
@@ -82,11 +118,7 @@ export function cleanTaskText(line: string): string {
 /** Markdown note -> widget rows. Frontmatter is skipped. */
 export function noteToRows(content: string, file: string): Row[] {
 	const lines = content.split("\n");
-	let start = 0;
-	if (lines[0]?.trim() === "---") {
-		const end = lines.findIndex((l, i) => i > 0 && l.trim() === "---");
-		if (end > 0) start = end + 1;
-	}
+	const start = bodyStart(lines);
 	const rows: Row[] = [];
 	for (let i = start; i < lines.length && rows.length < MAX_ROWS; i++) {
 		const line = lines[i];

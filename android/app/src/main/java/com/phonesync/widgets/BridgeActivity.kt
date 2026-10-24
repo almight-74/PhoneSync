@@ -33,8 +33,9 @@ class BridgeActivity : Activity() {
     }
 
     private fun open(target: String) {
-        if (target == Store.APPEND) {
-            startActivity(Intent(this, AppendActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        if (target == Store.APPEND || target == Store.VOICE) {
+            startActivity(Intent(this, CaptureActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .setAction(if (target == Store.VOICE) CaptureActivity.ACTION_VOICE else Intent.ACTION_MAIN))
             return
         }
         try {

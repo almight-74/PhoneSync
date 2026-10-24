@@ -4,14 +4,19 @@ import android.app.Activity
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Typeface
 import android.os.Bundle
+import android.text.format.DateUtils
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
+import android.widget.Spinner
 import android.widget.TextView
+import android.widget.Toast
 
 /** Widget setup (note picker / button editor). Opened from the launcher it shows setup help. */
 class ConfigActivity : Activity() {
@@ -66,7 +71,7 @@ class ConfigActivity : Activity() {
     private fun actionsSetup() {
         title = "Buttons"
         text("Each button: a label and a target. Target can be an Obsidian command id " +
-            "(e.g. daily-notes, switcher:open), any URI (obsidian://...), or \"append\" for Quick append.")
+            "(e.g. daily-notes, switcher:open), any URI (obsidian://...), \"append\" for capture or \"voice\" for dictation.")
         val fields = Store.actions(this, id).let { saved ->
             (0 until 4).map { i ->
                 val (label, target) = saved.getOrNull(i) ?: ("" to "")
@@ -85,21 +90,80 @@ class ConfigActivity : Activity() {
 
     private fun help() {
         title = getString(R.string.app_name)
-        text("""
-            Setup
-            1. Install the Widget Bridge plugin in Obsidian (BRAT → almight-74/PhoneSync).
-            2. In Obsidian, open a note → command "Widget Bridge: Show current note in a widget".
-            3. Long-press the home screen → Widgets → Obsidian Widgets.
+        heading("Notes received from Obsidian")
+        val keys = Store.keys(this)
+        text(if (keys.isEmpty()) "None yet. In Obsidian run \"Widget Bridge: Show current note in a widget\"."
+        else keys.joinToString("\n") { key ->
+            val t = Store.received(this, key)
+            "• $key — " + if (t == 0L) "never" else DateUtils.getRelativeTimeSpanString(t).toString()
+        })
 
-            Routines / Tasker / any app can use these URIs:
+        heading("Capture destinations")
+        text("Mode: append / prepend add to a note (path or @daily, optional heading); new creates a note " +
+            "in a folder. Tokens for template and file name: {{text}} {{title}} {{date}} {{time}} {{datetime}}")
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(list)
+        val editors = mutableListOf<DestinationEditor>()
+        fun add(d: Destination) {
+            val e = DestinationEditor(d)
+            editors += e
+            list.addView(e.view)
+            e.onDelete = { editors.remove(e); list.removeView(e.view) }
+        }
+        Store.destinations(this).forEach(::add)
+        button("+ Add destination") { add(Destination("New destination", "append", "@daily")) }
+        button("Save destinations") {
+            Store.setDestinations(this, editors.map { it.value() }.filter { it.name.isNotBlank() })
+            Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
+        }
+        button("Open capture") { startActivity(Intent(this, CaptureActivity::class.java)) }
+
+        heading("Routines / Tasker URIs")
+        text("""
             obsidian://widget-bridge?action=command&id=<command-id>
-            obsidian://widget-bridge?action=append&file=Inbox&text=Hello
+            obsidian://widget-bridge?action=capture&mode=append&file=@daily&text=Hello
+            obsidian://widget-bridge?action=capture&mode=new&folder=Inbox&name=Idea&text=Hello
             obsidian://widget-bridge?action=open&file=@daily
-            obsidian://widget-bridge?action=toggle&file=Tasks.md&line=3
+            obsidian://widget-bridge?action=push
             Add &back=1 to return to the home screen afterwards.
         """.trimIndent())
-        button("Quick append") { startActivity(Intent(this, AppendActivity::class.java)) }
     }
+
+    /** Field block for one capture destination. */
+    private inner class DestinationEditor(d: Destination) {
+        var onDelete: () -> Unit = {}
+        private val name = field("Name", d.name)
+        private val mode = Spinner(this@ConfigActivity).apply {
+            adapter = ArrayAdapter(this@ConfigActivity, android.R.layout.simple_spinner_dropdown_item, Store.MODES)
+            setSelection(Store.MODES.indexOf(d.mode).coerceAtLeast(0))
+        }
+        private val target = field("Note (append/prepend) or folder (new)", d.target)
+        private val heading = field("Heading (optional)", d.heading)
+        private val fileName = field("File name for new notes", d.fileName)
+        private val template = field("Template", d.template)
+        val view = LinearLayout(this@ConfigActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 24, 0, 24)
+            listOf(name, mode, target, heading, fileName, template).forEach { addView(it) }
+            addView(Button(this@ConfigActivity).apply { text = "Delete"; setOnClickListener { onDelete() } })
+        }
+
+        fun value() = Destination(name.text.toString().trim(), Store.MODES[mode.selectedItemPosition],
+            target.text.toString().trim(), heading.text.toString().trim(), template.text.toString(),
+            fileName.text.toString().trim())
+
+        private fun field(hint: String, value: String) = EditText(this@ConfigActivity).apply {
+            this.hint = hint
+            setText(value)
+        }
+    }
+
+    private fun heading(s: String) = root.addView(TextView(this).apply {
+        text = s
+        textSize = 18f
+        setTypeface(typeface, Typeface.BOLD)
+        setPadding(0, 32, 0, 8)
+    })
 
     private fun text(s: String) = root.addView(TextView(this).apply { text = s; setPadding(0, 16, 0, 16) })
 

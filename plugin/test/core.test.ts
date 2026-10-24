@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { appendToContent, cleanTaskText, noteToRows, toggleInContent, toggleTaskLine } from "../src/core.ts";
+import {
+	appendToContent, cleanTaskText, noteToRows, prependToContent, safeFileName, toggleInContent, toggleTaskLine, uniquePath,
+} from "../src/core.ts";
 
 test("toggleTaskLine flips both ways and ignores non-tasks", () => {
 	assert.equal(toggleTaskLine("- [ ] a"), "- [x] a");
@@ -37,4 +39,23 @@ test("noteToRows skips frontmatter and classifies lines", () => {
 		{ k: "x", s: "• item" },
 		{ k: "x", s: "text" },
 	]);
+});
+
+test("prependToContent: after frontmatter, under a heading, or new heading on top", () => {
+	assert.equal(prependToContent("", "x"), "x\n");
+	assert.equal(prependToContent("a\nb", "x"), "x\na\nb");
+	assert.equal(prependToContent("---\nt: 1\n---\na", "x"), "---\nt: 1\n---\nx\na");
+	assert.equal(prependToContent("# Log\n- old", "- new", "Log"), "# Log\n- new\n- old");
+	assert.equal(prependToContent("body", "- new", "Log"), "## Log\n- new\n\nbody");
+});
+
+test("safeFileName strips forbidden characters", () => {
+	assert.equal(safeFileName("a/b: c?"), "a-b- c-");
+	assert.equal(safeFileName("   "), "Untitled");
+});
+
+test("uniquePath adds a counter when the name is taken", () => {
+	const taken = new Set(["Inbox/Idea.md", "Inbox/Idea 1.md"]);
+	assert.equal(uniquePath("Inbox/", "Idea", (p) => taken.has(p)), "Inbox/Idea 2.md");
+	assert.equal(uniquePath("", "New", () => false), "New.md");
 });
