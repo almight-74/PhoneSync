@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Obsidian Widgets</string>
+    <string name="note_widget">Obsidian note</string>
+    <string name="actions_widget">Obsidian actions</string>
+    <string name="note_widget_desc">Shows a note from your vault. Tap a checkbox to tick it.</string>
+    <string name="actions_widget_desc">Four buttons: new note, daily note, capture, voice.</string>
+    <string name="capture">Send to Obsidian</string>
+    <string name="capture_short">Capture</string>
+    <string name="voice_short">Voice note</string>
+    <string name="empty">No content yet. Open Obsidian once so the note can sync.</string>
+</resources>

@@ -1,0 +1,8 @@
+<resources>
+    <color name="bg">#F2FFFFFF</color>
+    <color name="btn">#14000000</color>
+    <color name="text">#FF202124</color>
+    <color name="muted">#FF80868B</color>
+    <color name="accent">#FF7F6DF2</color>
+    <color name="launcher_bg">#FF7F6DF2</color>
+</resources>
