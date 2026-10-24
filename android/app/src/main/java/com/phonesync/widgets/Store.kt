@@ -40,16 +40,21 @@ object Store {
 
     private fun prefs(c: Context) = c.getSharedPreferences("widgets", Context.MODE_PRIVATE)
 
-    /** Builds obsidian://widget-bridge?action=...&k=v (handled by the Widget Bridge plugin). */
+    /** Builds obsidian://widget-bridge?do=...&k=v (handled by the Widget Bridge plugin). */
     fun bridge(action: String, vararg params: Pair<String, String>): String {
-        val b = Uri.Builder().scheme("obsidian").authority("widget-bridge").appendQueryParameter("action", action)
+        val b = Uri.Builder().scheme("obsidian").authority("widget-bridge").appendQueryParameter("do", action)
         params.forEach { (k, v) -> b.appendQueryParameter(k, v) }
         return b.build().toString()
     }
 
     /** A button target is a URI, the APPEND marker, or a bare Obsidian command id. */
-    fun targetUri(target: String): String =
-        if (target.contains("://")) target else bridge("command", "id" to target, "back" to "1")
+    fun targetUri(target: String): String = when {
+        // Buttons saved by v0.2.0 used ?action=, which Obsidian overwrites; rewrite to ?do=.
+        target.startsWith("obsidian://widget-bridge?action=") ->
+            target.replaceFirst("obsidian://widget-bridge?action=", "obsidian://widget-bridge?do=")
+        target.contains("://") -> target
+        else -> bridge("command", "id" to target, "back" to "1")
+    }
 
     // ---------- snapshots ----------
 

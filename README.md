@@ -28,13 +28,13 @@ The same screen shows when each note last reached the app, which helps with trou
 
 ## URI actions (Routines, Tasker, shortcuts)
 ```
-obsidian://widget-bridge?action=command&id=<command-id>      run any Obsidian command
-obsidian://widget-bridge?action=append&file=Inbox&text=Hi    append a line (optional &heading=Log)
-obsidian://widget-bridge?action=capture&mode=prepend&file=Log&text=Hi      prepend (mode=append works too)
-obsidian://widget-bridge?action=capture&mode=new&folder=Inbox&name=Idea&text=Hi   new note in a folder
-obsidian://widget-bridge?action=open&file=@daily             open a note (created if missing)
-obsidian://widget-bridge?action=toggle&file=Tasks.md&line=3  tick/untick a task (0-based line)
-obsidian://widget-bridge?action=push                         refresh widgets
+obsidian://widget-bridge?do=command&id=<command-id>      run any Obsidian command
+obsidian://widget-bridge?do=append&file=Inbox&text=Hi    append a line (optional &heading=Log)
+obsidian://widget-bridge?do=capture&mode=prepend&file=Log&text=Hi      prepend (mode=append works too)
+obsidian://widget-bridge?do=capture&mode=new&folder=Inbox&name=Idea&text=Hi   new note in a folder
+obsidian://widget-bridge?do=open&file=@daily             open a note (created if missing)
+obsidian://widget-bridge?do=toggle&file=Tasks.md&line=3  tick/untick a task (0-based line)
+obsidian://widget-bridge?do=push                         refresh widgets
 ```
 Add `&back=1` to any of these to return to the home screen when the action is done. URL-encode the values.
 

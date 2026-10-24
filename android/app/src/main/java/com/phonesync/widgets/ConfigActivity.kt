@@ -120,11 +120,11 @@ class ConfigActivity : Activity() {
 
         heading("Routines / Tasker URIs")
         text("""
-            obsidian://widget-bridge?action=command&id=<command-id>
-            obsidian://widget-bridge?action=capture&mode=append&file=@daily&text=Hello
-            obsidian://widget-bridge?action=capture&mode=new&folder=Inbox&name=Idea&text=Hello
-            obsidian://widget-bridge?action=open&file=@daily
-            obsidian://widget-bridge?action=push
+            obsidian://widget-bridge?do=command&id=<command-id>
+            obsidian://widget-bridge?do=capture&mode=append&file=@daily&text=Hello
+            obsidian://widget-bridge?do=capture&mode=new&folder=Inbox&name=Idea&text=Hello
+            obsidian://widget-bridge?do=open&file=@daily
+            obsidian://widget-bridge?do=push
             Add &back=1 to return to the home screen afterwards.
         """.trimIndent())
     }

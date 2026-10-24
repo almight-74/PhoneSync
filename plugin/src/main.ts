@@ -88,18 +88,19 @@ export default class WidgetBridge extends Plugin {
 		await this.saveSettings();
 	}
 
-	// ---------- obsidian://widget-bridge?action=... ----------
+	// ---------- obsidian://widget-bridge?do=... ----------
+	// Obsidian overwrites the `action` query param with the handler name, so the verb travels as `do`.
 
 	async handle(p: Record<string, string>) {
 		try {
-			switch (p.action) {
+			switch (p.do) {
 				case "toggle": await this.toggle(p.file, Number(p.line), p.match); break;
 				case "append": await this.append(p.file || this.settings.appendTarget, p.text ?? "", p.heading); break;
 				case "capture": await this.capture(p); break;
 				case "open": await this.open(p.file); break;
 				case "command": this.runCommand(p.id); break;
 				case "push": await this.pushAll(); break;
-				default: new Notice(`Widget Bridge: unknown action "${p.action}"`);
+				default: new Notice(`Widget Bridge: unknown action "${p.do}"`);
 			}
 		} catch (e) {
 			new Notice(`Widget Bridge: ${(e as Error).message}`);
@@ -180,7 +181,7 @@ export default class WidgetBridge extends Plugin {
 				key,
 				title: file instanceof TFile ? file.basename : key,
 				vault: this.app.vault.getName(),
-				open: `obsidian://widget-bridge?action=open&file=${encodeURIComponent(key)}`,
+				open: `obsidian://widget-bridge?do=open&file=${encodeURIComponent(key)}`,
 				updated: Date.now(),
 				rows,
 			};
