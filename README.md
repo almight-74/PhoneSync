@@ -45,4 +45,4 @@ To find command ids, enable *Settings → Community plugins → Developer mode* 
 cd plugin && npm ci && npm test && npm run build   # dist/main.js + manifest.json
 cd android && ./gradlew assembleRelease            # needs the Android SDK
 ```
-CI builds both on every push. Pushing a tag such as `0.1.0` (the same as the version in `manifest.json`, which BRAT requires) publishes a release named `YYYYMMDD_widgets-v0.1.0`.
+CI builds both on every push. When `main` gets a `manifest.json` version that has no release yet, CI publishes release `x.y.z` (named `YYYYMMDD_widgets-vx.y.z`) with `main.js`, `manifest.json` and the APK. To ship, bump the version in `manifest.json` and push to `main`.

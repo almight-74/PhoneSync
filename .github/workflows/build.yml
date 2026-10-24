@@ -49,19 +49,33 @@ jobs:
           name: apk
           path: android/obsidian-widgets.apk
 
+  # Publishes a release whenever main (or a tag) carries a manifest version that has no release yet.
   release:
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
     needs: [plugin, android]
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/download-artifact@v4
-      - name: Release name (YYYYMMDD_widgets-v<version>)
-        run: echo "NAME=$(date -u +%Y%m%d)_widgets-v${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
-      # BRAT looks up the release whose tag equals the manifest version, so the tag stays "x.y.z".
-      - uses: softprops/action-gh-release@v2
+      - uses: actions/checkout@v4
+      - name: Version from manifest.json
+        run: |
+          V=$(jq -r .version manifest.json)
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+          echo "NAME=$(date -u +%Y%m%d)_widgets-v$V" >> "$GITHUB_ENV"
+          if gh release view "$V" >/dev/null 2>&1; then echo "EXISTS=1" >> "$GITHUB_ENV"; fi
+      - if: env.EXISTS != '1'
+        uses: actions/download-artifact@v4
         with:
+          path: out
+      # BRAT looks up the release whose tag equals the manifest version, so the tag stays "x.y.z".
+      - if: env.EXISTS != '1'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
           name: ${{ env.NAME }}
           files: |
-            plugin/main.js
-            plugin/manifest.json
-            apk/obsidian-widgets.apk
+            out/plugin/main.js
+            out/plugin/manifest.json
+            out/apk/obsidian-widgets.apk
