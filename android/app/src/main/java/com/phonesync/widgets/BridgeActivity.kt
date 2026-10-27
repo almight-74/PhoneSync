@@ -11,7 +11,9 @@ import android.widget.Toast
  * Invisible hop between widgets and Obsidian.
  *  - obsidianwidget://snapshot?d=<json>  from the plugin: store it and refresh widgets
  *  - obsidianwidget://home               from the plugin: go back to the home screen
- *  - EXTRA_URI                            from a widget tap: open that obsidian:// URI
+ *  - obsidianwidget://catalog?d=<json>   from the plugin: store command/folder/note lists
+ *  - EXTRA_URI                            from a widget tap: open that obsidian:// URI, or
+ *                                         "edit:<note>" to open the home-screen editor
  */
 class BridgeActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -24,6 +26,8 @@ class BridgeActivity : Activity() {
                     NoteWidgetProvider.refreshAll(this)
                 }
             }
+            data?.scheme == "obsidianwidget" && data.host == "catalog" ->
+                data.getQueryParameter("d")?.let { runCatching { Store.saveCatalog(this, it) } }
             data?.scheme == "obsidianwidget" && data.host == "home" ->
                 startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -33,6 +37,11 @@ class BridgeActivity : Activity() {
     }
 
     private fun open(target: String) {
+        if (target.startsWith(EDIT)) {
+            startActivity(Intent(this, EditorActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra(EditorActivity.EXTRA_KEY, target.removePrefix(EDIT)))
+            return
+        }
         if (target == Store.APPEND || target == Store.VOICE) {
             startActivity(Intent(this, CaptureActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 .setAction(if (target == Store.VOICE) CaptureActivity.ACTION_VOICE else Intent.ACTION_MAIN))
@@ -48,5 +57,6 @@ class BridgeActivity : Activity() {
 
     companion object {
         const val EXTRA_URI = "uri"
+        const val EDIT = "edit:"
     }
 }

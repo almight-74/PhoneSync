@@ -1,21 +1,26 @@
-import { App, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TFile, debounce, moment, normalizePath } from "obsidian";
-import { Snapshot, appendToContent, noteToRows, prependToContent, toggleInContent, uniquePath } from "./core";
+import { App, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TFile, TFolder, debounce, moment, normalizePath } from "obsidian";
+import {
+	Catalog, MAX_CATALOG_NOTES, MAX_EDIT_CHARS, Snapshot, appendToContent, hashText, noteToRows, prependToContent,
+	replaceIfUnchanged, toggleInContent, uniquePath,
+} from "./core";
 
 interface Settings {
-	pinned: string[];    // note paths, or "@daily" for today's daily note
-	appendTarget: string;
+	pinned: string[];    // note paths, or "@daily" for today's daily note; managed from the phone app
 	autoPush: "save" | "typing" | "off";
-	debug: boolean;      // show a notice on every push
+	debug: boolean;      // show a notice on every push (toggled by command)
 }
 
-const DEFAULTS: Settings = { pinned: [], appendTarget: "@daily", autoPush: "save", debug: false };
+const DEFAULTS: Settings = { pinned: [], autoPush: "save", debug: false };
+const DEFAULT_TARGET = "@daily";
 const BRIDGE = "obsidianwidget://";
 
 export default class WidgetBridge extends Plugin {
 	settings: Settings = DEFAULTS;
 
 	private pending = false;
+	private catalogPending = false;
 	private lastSent = new Map<string, string>(); // key -> content signature, to skip unchanged notes
+	private lastCatalog = "";
 
 	// Android blocks activity starts from a backgrounded app, so pushes only go out while
 	// Obsidian is visible; one that comes due in the background waits for the next resume.
@@ -24,6 +29,11 @@ export default class WidgetBridge extends Plugin {
 		if (document.visibilityState === "visible") this.pushAll(false);
 		else this.pending = true;
 	}, 700, true);
+
+	private scheduleCatalog = debounce(() => {
+		if (document.visibilityState === "visible") this.sendCatalog(false);
+		else this.catalogPending = true;
+	}, 5000, true);
 
 	async onload() {
 		this.settings = Object.assign({}, DEFAULTS, await this.loadData());
@@ -52,6 +62,16 @@ export default class WidgetBridge extends Plugin {
 			},
 		});
 		this.addCommand({ id: "push-widgets", name: "Refresh widgets now", callback: () => this.pushAll() });
+		this.addCommand({ id: "send-catalog", name: "Send command and note lists to the app", callback: () => this.sendCatalog(true) });
+		this.addCommand({
+			id: "toggle-debug",
+			name: "Toggle debug notices",
+			callback: async () => {
+				this.settings.debug = !this.settings.debug;
+				await this.saveSettings();
+				new Notice(`Widget Bridge debug ${this.settings.debug ? "on" : "off"}`);
+			},
+		});
 
 		this.registerEvent(this.app.vault.on("modify", (f) => {
 			if (this.resolvedPinned().some((p) => p.path === f.path)) this.schedulePush();
@@ -66,10 +86,16 @@ export default class WidgetBridge extends Plugin {
 		this.registerEvent(this.app.vault.on("rename", (f, old) => {
 			const i = this.settings.pinned.indexOf(old);
 			if (i >= 0) { this.settings.pinned[i] = f.path; this.saveSettings(); this.schedulePush(); }
+			this.scheduleCatalog();
 		}));
+		this.registerEvent(this.app.vault.on("create", () => this.scheduleCatalog()));
+		this.registerEvent(this.app.vault.on("delete", () => this.scheduleCatalog()));
 		this.registerDomEvent(document, "visibilitychange", () => {
-			if (document.visibilityState === "visible" && this.pending) this.pushAll(false);
+			if (document.visibilityState !== "visible") return;
+			if (this.pending) this.pushAll(false);
+			if (this.catalogPending) this.sendCatalog(false);
 		});
+		this.app.workspace.onLayoutReady(() => this.scheduleCatalog());
 	}
 
 	async saveSettings() {
@@ -77,7 +103,7 @@ export default class WidgetBridge extends Plugin {
 	}
 
 	async pin(path: string) {
-		this.settings.pinned.push(path);
+		if (!this.settings.pinned.includes(path)) this.settings.pinned.push(path);
 		await this.saveSettings();
 		await this.pushAll();
 		new Notice(`Widget: ${path} is available. Add a Note widget on the home screen and pick it.`);
@@ -95,11 +121,15 @@ export default class WidgetBridge extends Plugin {
 		try {
 			switch (p.do) {
 				case "toggle": await this.toggle(p.file, Number(p.line), p.match); break;
-				case "append": await this.append(p.file || this.settings.appendTarget, p.text ?? "", p.heading); break;
+				case "append": await this.append(p.file || DEFAULT_TARGET, p.text ?? "", p.heading); break;
 				case "capture": await this.capture(p); break;
+				case "replace": await this.replace(p.file, p.text ?? "", p.base ?? ""); break;
 				case "open": await this.open(p.file); break;
 				case "command": this.runCommand(p.id); break;
+				case "pin": await this.pin(p.file); break;
+				case "unpin": await this.unpin(p.file); new Notice(`Widget: removed ${p.file}`); break;
 				case "push": await this.pushAll(); break;
+				case "catalog": await this.sendCatalog(true); break;
 				default: new Notice(`Widget Bridge: unknown action "${p.do}"`);
 			}
 		} catch (e) {
@@ -129,6 +159,24 @@ export default class WidgetBridge extends Plugin {
 		await this.pushAll();
 	}
 
+	/** Saves the home-screen editor. If the note changed meanwhile, the edit goes to a copy instead. */
+	private async replace(path: string, text: string, base: string) {
+		const file = await this.ensureFile(this.resolvePath(path));
+		let conflict = false;
+		await this.app.vault.process(file, (data) => {
+			const next = replaceIfUnchanged(data, base, text);
+			if (next === null) { conflict = true; return data; }
+			return next;
+		});
+		if (conflict) {
+			const copy = uniquePath(file.parent?.path ?? "", `${file.basename} (widget edit)`,
+				(x) => !!this.app.vault.getAbstractFileByPath(normalizePath(x)));
+			await this.app.vault.create(normalizePath(copy), text);
+			new Notice(`${file.basename} changed elsewhere; your edit was saved as ${copy}`);
+		}
+		await this.pushAll();
+	}
+
 	/** mode=append|prepend (file, heading?) or mode=new (folder, name). */
 	private async capture(p: Record<string, string>) {
 		const text = p.text ?? "";
@@ -145,12 +193,12 @@ export default class WidgetBridge extends Plugin {
 			return;
 		}
 		if (p.mode === "prepend") {
-			const file = await this.ensureFile(this.resolvePath(p.file || this.settings.appendTarget));
+			const file = await this.ensureFile(this.resolvePath(p.file || DEFAULT_TARGET));
 			await this.app.vault.process(file, (data) => prependToContent(data, text, p.heading || undefined));
 			await this.pushAll();
 			return;
 		}
-		await this.append(p.file || this.settings.appendTarget, text, p.heading || undefined);
+		await this.append(p.file || DEFAULT_TARGET, text, p.heading || undefined);
 	}
 
 	private async open(path: string) {
@@ -165,7 +213,7 @@ export default class WidgetBridge extends Plugin {
 		if (!ok) throw new Error(`command "${id}" not found`);
 	}
 
-	// ---------- snapshots ----------
+	// ---------- snapshots and catalog ----------
 
 	/** `force` re-sends notes even if they did not change since the last push. */
 	async pushAll(force = true) {
@@ -173,8 +221,8 @@ export default class WidgetBridge extends Plugin {
 		for (const { key, path } of this.resolvedPinned()) {
 			const file = this.app.vault.getAbstractFileByPath(path);
 			const content = file instanceof TFile ? this.liveText(file) ?? await this.app.vault.cachedRead(file) : "";
-			const rows = noteToRows(content, key);
-			const sig = (file?.path ?? "") + JSON.stringify(rows);
+			const hash = hashText(content);
+			const sig = (file?.path ?? "") + hash;
 			if (!force && this.lastSent.get(key) === sig) continue;
 			this.lastSent.set(key, sig);
 			const snap: Snapshot = {
@@ -183,11 +231,34 @@ export default class WidgetBridge extends Plugin {
 				vault: this.app.vault.getName(),
 				open: `obsidian://widget-bridge?do=open&file=${encodeURIComponent(key)}`,
 				updated: Date.now(),
-				rows,
+				rows: noteToRows(content, key),
+				text: content.length <= MAX_EDIT_CHARS ? content : undefined,
+				hash,
 			};
 			if (this.settings.debug) new Notice(`Widget Bridge: sent ${key}`);
 			this.send(`snapshot?d=${encodeURIComponent(JSON.stringify(snap))}`);
 		}
+	}
+
+	/** Commands, folders and notes for the app's pickers. Skipped when nothing changed unless forced. */
+	async sendCatalog(force: boolean) {
+		this.catalogPending = false;
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const commands = ((this.app as any).commands.listCommands() as { id: string; name: string }[])
+			.map((c) => [c.id, c.name] as [string, string])
+			.sort((a, b) => a[1].localeCompare(b[1]));
+		const folders = this.app.vault.getAllLoadedFiles()
+			.filter((f): f is TFolder => f instanceof TFolder && f.path !== "/")
+			.map((f) => f.path).sort();
+		const notes = this.app.vault.getMarkdownFiles()
+			.sort((a, b) => b.stat.mtime - a.stat.mtime)
+			.slice(0, MAX_CATALOG_NOTES).map((f) => f.path);
+		const catalog: Catalog = { commands, folders, notes };
+		const json = JSON.stringify(catalog);
+		if (!force && json === this.lastCatalog) return;
+		this.lastCatalog = json;
+		if (this.settings.debug) new Notice(`Widget Bridge: sent lists (${commands.length} commands, ${notes.length} notes)`);
+		this.send(`catalog?d=${encodeURIComponent(json)}`);
 	}
 
 	/** Unsaved editor text if the note is open in the active editor. */
@@ -231,6 +302,7 @@ export default class WidgetBridge extends Plugin {
 	}
 }
 
+/** One setting; everything else is set up in the phone app. */
 class BridgeSettingTab extends PluginSettingTab {
 	constructor(app: App, private plugin: WidgetBridge) {
 		super(app, plugin);
@@ -241,49 +313,14 @@ class BridgeSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName("Notes shown in widgets")
-			.setDesc('One path per line. Use "@daily" for today\'s daily note.')
-			.addTextArea((t) => t
-				.setValue(this.plugin.settings.pinned.join("\n"))
-				.onChange(async (v) => {
-					this.plugin.settings.pinned = v.split("\n").map((s) => s.trim()).filter(Boolean);
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName("Default append target")
-			.setDesc("Used by Quick append when no note is given.")
-			.addText((t) => t
-				.setValue(this.plugin.settings.appendTarget)
-				.onChange(async (v) => {
-					this.plugin.settings.appendTarget = v.trim() || "@daily";
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName("Auto-refresh")
-			.setDesc("When to send changed notes to the widgets. Sending only works while Obsidian is open; " +
-				"anything missed goes out the next time you open it.")
+			.setName("Auto-refresh widgets")
+			.setDesc("Notes, buttons and capture options are set up in the Obsidian Widgets app.")
 			.addDropdown((d) => d
-				.addOptions({ save: "When the note is saved", typing: "While typing (more frequent)", off: "Off (⟳ button only)" })
+				.addOptions({ save: "When the note is saved", typing: "While typing", off: "Only with the ⟳ button" })
 				.setValue(this.plugin.settings.autoPush)
 				.onChange(async (v) => {
 					this.plugin.settings.autoPush = v as Settings["autoPush"];
 					await this.plugin.saveSettings();
 				}));
-
-		new Setting(containerEl)
-			.setName("Debug: notice on each push")
-			.setDesc("Shows a notice whenever notes are sent to the widgets.")
-			.addToggle((t) => t
-				.setValue(this.plugin.settings.debug)
-				.onChange(async (v) => {
-					this.plugin.settings.debug = v;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName("Refresh widgets")
-			.addButton((b) => b.setButtonText("Push now").onClick(() => this.plugin.pushAll()));
 	}
 }

@@ -7,15 +7,16 @@ import android.net.Uri
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import android.text.InputType
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.Spinner
+import android.widget.ScrollView
+import android.widget.TextView
 import android.widget.Toast
 
 /**
- * Capture dialog: pick a destination, type or dictate, send to Obsidian via the plugin.
+ * Capture dialog: type or dictate, then tap where it goes (one big button per capture option).
+ * "Run a command" options ignore the text and just run the command.
  * Also the share-sheet target ("Send to Obsidian") for text from other apps.
  */
 class CaptureActivity : Activity() {
@@ -25,51 +26,56 @@ class CaptureActivity : Activity() {
         super.onCreate(savedInstanceState)
         title = "Send to Obsidian"
         val pad = (16 * resources.displayMetrics.density).toInt()
-        val destinations = Store.destinations(this)
 
-        val spinner = Spinner(this).apply {
-            adapter = ArrayAdapter(this@CaptureActivity, android.R.layout.simple_spinner_dropdown_item,
-                destinations.map { it.name })
-            setSelection(Store.lastDestination(this@CaptureActivity).coerceIn(0, (destinations.size - 1).coerceAtLeast(0)))
-        }
         input = EditText(this).apply {
-            hint = "Text"
+            hint = "Type, or tap 🎤"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
                 InputType.TYPE_TEXT_FLAG_MULTI_LINE
             minLines = 3
             if (savedInstanceState == null) setText(sharedText())
         }
-        val mic = Button(this).apply { this.text = "🎤"; setOnClickListener { dictate() } }
-        val send = Button(this).apply {
-            this.text = "Send"
-            setOnClickListener {
-                val d = destinations.getOrNull(spinner.selectedItemPosition) ?: return@setOnClickListener
-                val body = input.text.toString().trim()
-                if (body.isEmpty()) return@setOnClickListener
-                Store.setLastDestination(this@CaptureActivity, spinner.selectedItemPosition)
-                try {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Store.captureUri(d, body)))
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    finish()
-                } catch (e: ActivityNotFoundException) {
-                    Toast.makeText(this@CaptureActivity, "Obsidian is not installed", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
+        val mic = Button(this).apply { text = "🎤 Dictate"; setOnClickListener { dictate() } }
 
-        setContentView(LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, pad)
-            addView(spinner)
-            addView(input)
+        val buttons = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        Store.destinations(this).forEach { d ->
+            buttons.addView(Button(this).apply {
+                text = if (d.mode == "command") "▶ ${d.name}" else "→ ${d.name}"
+                textSize = 17f
+                setOnClickListener { send(d) }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
+        buttons.addView(TextView(this).apply {
+            text = "Add or change these in the Obsidian Widgets app."
+            setPadding(0, pad / 2, 0, 0)
+            alpha = 0.6f
+        })
+
+        setContentView(ScrollView(this).apply {
             addView(LinearLayout(this@CaptureActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
+                orientation = LinearLayout.VERTICAL
+                setPadding(pad, pad, pad, pad)
+                addView(input)
                 addView(mic)
-                addView(send, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                addView(buttons)
             })
         })
         input.requestFocus()
         if (savedInstanceState == null && intent.action == ACTION_VOICE) dictate()
+    }
+
+    private fun send(d: Destination) {
+        val body = input.text.toString().trim()
+        if (body.isEmpty() && d.mode != "command") {
+            Toast.makeText(this, "Type or dictate something first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Store.captureUri(d, body)))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            finish()
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(this, "Obsidian is not installed", Toast.LENGTH_SHORT).show()
+        }
     }
 
     /** Subject + text from a share intent, if any. */

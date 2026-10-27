@@ -12,7 +12,19 @@ export interface Snapshot {
 	open: string;     // obsidian:// URI used when the header is tapped
 	updated: number;  // epoch ms
 	rows: Row[];
+	text?: string;    // raw note, for the home-screen editor (omitted when too large)
+	hash: string;     // hashText(raw note); the editor sends it back so stale edits are caught
 }
+
+/** Lists the app's pickers show. */
+export interface Catalog {
+	commands: [string, string][]; // [id, name]
+	folders: string[];
+	notes: string[];              // most recently modified first
+}
+
+export const MAX_EDIT_CHARS = 30000;
+export const MAX_CATALOG_NOTES = 1500;
 
 export const MAX_ROWS = 200;
 
@@ -128,4 +140,19 @@ export function noteToRows(content: string, file: string): Row[] {
 		else if (line.trim() !== "") rows.push({ k: "x", s: line.replace(/^(\s*)[-*+]\s/, "$1• ") });
 	}
 	return rows;
+}
+
+/** Short, stable content hash (FNV-1a, hex). */
+export function hashText(s: string): string {
+	let h = 0x811c9dc5;
+	for (let i = 0; i < s.length; i++) {
+		h ^= s.charCodeAt(i);
+		h = Math.imul(h, 0x01000193);
+	}
+	return (h >>> 0).toString(16);
+}
+
+/** The edited text if the note is unchanged since the widget's snapshot (`base`), else null. */
+export function replaceIfUnchanged(current: string, base: string, edited: string): string | null {
+	return hashText(current) === base ? edited : null;
 }

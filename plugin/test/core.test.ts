@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-	appendToContent, cleanTaskText, noteToRows, prependToContent, safeFileName, toggleInContent, toggleTaskLine, uniquePath,
+	appendToContent, cleanTaskText, hashText, noteToRows, replaceIfUnchanged, prependToContent, safeFileName, toggleInContent, toggleTaskLine, uniquePath,
 } from "../src/core.ts";
 
 test("toggleTaskLine flips both ways and ignores non-tasks", () => {
@@ -58,4 +58,11 @@ test("uniquePath adds a counter when the name is taken", () => {
 	const taken = new Set(["Inbox/Idea.md", "Inbox/Idea 1.md"]);
 	assert.equal(uniquePath("Inbox/", "Idea", (p) => taken.has(p)), "Inbox/Idea 2.md");
 	assert.equal(uniquePath("", "New", () => false), "New.md");
+});
+
+test("replaceIfUnchanged only overwrites the version the editor started from", () => {
+	const base = hashText("a\nb");
+	assert.equal(replaceIfUnchanged("a\nb", base, "a\nb\nc"), "a\nb\nc");
+	assert.equal(replaceIfUnchanged("a\nb\nchanged elsewhere", base, "a\nb\nc"), null);
+	assert.notEqual(hashText("x"), hashText("y"));
 });

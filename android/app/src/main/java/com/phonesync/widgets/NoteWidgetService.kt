@@ -15,15 +15,14 @@ class NoteWidgetService : RemoteViewsService() {
 
     private class Factory(private val c: Context, private val id: Int) : RemoteViewsFactory {
         private var rows = JSONArray()
-        private var open: String? = null
+        private var key: String? = null
 
         override fun onCreate() {}
         override fun onDestroy() {}
 
         override fun onDataSetChanged() {
-            val snap = Store.noteKey(c, id)?.let { Store.snapshot(c, it) }
-            rows = snap?.optJSONArray("rows") ?: JSONArray()
-            open = snap?.optString("open")
+            key = Store.noteKey(c, id)
+            rows = key?.let { Store.snapshot(c, it) }?.optJSONArray("rows") ?: JSONArray()
         }
 
         override fun getCount() = rows.length()
@@ -51,7 +50,8 @@ class NoteWidgetService : RemoteViewsService() {
             val layout = if (row.optString("k") == "h") R.layout.row_heading else R.layout.row_text
             return RemoteViews(c.packageName, layout).apply {
                 setTextViewText(R.id.text, text)
-                open?.let { setOnClickFillInIntent(R.id.text, Intent().putExtra(BridgeActivity.EXTRA_URI, it)) }
+                // Tapping text opens the home-screen editor; the title still opens Obsidian.
+                key?.let { setOnClickFillInIntent(R.id.text, Intent().putExtra(BridgeActivity.EXTRA_URI, BridgeActivity.EDIT + it)) }
             }
         }
     }

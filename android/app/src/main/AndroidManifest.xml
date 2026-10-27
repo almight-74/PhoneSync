@@ -63,6 +63,20 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".PickerActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Home-screen editor for a widget's note. -->
+        <activity
+            android:name=".EditorActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity=""
+            android:theme="@style/DialogTheme"
+            android:windowSoftInputMode="adjustResize|stateVisible" />
+
         <receiver
             android:name=".NoteWidgetProvider"
             android:exported="false"
